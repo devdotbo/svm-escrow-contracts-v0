@@ -1,0 +1,53 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Solana
+.anchor/
+.cache/
+dist/
+build/
+test-ledger/
+node_modules/
+*.so
+deploy/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Keys
+*keypair.json
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
