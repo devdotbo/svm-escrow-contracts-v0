@@ -2,10 +2,6 @@ use pinocchio::{
     account_info::AccountInfo,
     entrypoint::ProgramResult,
     pubkey::Pubkey,
-    program::invoke_signed,
-    system_instruction,
-    sysvar::clock::Clock,
-    ProgramError,
 };
 
 use crate::{

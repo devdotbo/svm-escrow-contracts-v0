@@ -1,0 +1,65 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: [stable, "1.77.0"]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          default: true
+          override: true
+          
+      - name: Install Rust components
+        run: rustup component add clippy rustfmt
+        
+      - name: Install Solana tools
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          
+      - name: Check formatting
+        run: cargo fmt -- --check
+        
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+        
+      - name: Run tests
+        run: cargo test --all -- --nocapture
+        
+      - name: Build BPF program
+        run: cargo build-bpf --manifest-path program/Cargo.toml -- --release
+        
+      - name: Check BPF size
+        run: |
+          BPF_SIZE=$(du -b program/target/deploy/*.so | awk '{print $1}')
+          echo "BPF program size: $BPF_SIZE bytes"
+          if [ "$BPF_SIZE" -gt 122880 ]; then
+            echo "ERROR: BPF program size exceeds 120 KiB limit!"
+            exit 1
+          fi
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          default: true
+          override: true
+          
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+        
+      # Fuzz testing will be added when we implement the Merkle proof verifier
+      # - name: Run fuzz tests
+      #   run: cd program && cargo fuzz run merkle_proof -- -runs=10000

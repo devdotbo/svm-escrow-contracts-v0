@@ -27,6 +27,3 @@ no-idl = []
 cpi = ["no-entrypoint"]
 default = []
 
-[[bin]]
-name = "svm-escrow"
-path = "src/entrypoint.rs"
