@@ -313,7 +313,8 @@ fn process_withdraw(
 }
 
 /// Verify Merkle proof for batch fills
-fn verify_merkle_proof(
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn verify_merkle_proof(
     leaf: &[u8; 32],
     proof: &[[u8; 32]],
     root: &[u8; 32],
@@ -351,7 +352,8 @@ fn verify_merkle_proof(
 }
 
 /// Hash two nodes for Merkle tree
-fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
     use solana_program::keccak;
     let mut data = [0u8; 64];
     data[..32].copy_from_slice(left);

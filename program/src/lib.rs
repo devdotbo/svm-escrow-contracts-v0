@@ -9,6 +9,9 @@ pub mod state;
 #[cfg(not(feature = "no-entrypoint"))]
 mod entrypoint;
 
+#[cfg(test)]
+mod tests;
+
 // Export types for use by clients
 pub use error::EscrowError;
 pub use instruction::{EscrowInit, EscrowInstruction};
