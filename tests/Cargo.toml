@@ -1,0 +1,32 @@
+[package]
+name = "svm-escrow-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+solana-program-test = { workspace = true }
+solana-sdk = { workspace = true }
+spl-token = { workspace = true }
+tokio = { workspace = true }
+bincode = { workspace = true }
+svm-escrow = { path = "../program", features = ["no-entrypoint"] }
+
+[[test]]
+name = "happy_path"
+path = "happy_path.rs"
+
+[[test]]
+name = "public_withdraw"
+path = "public_withdraw.rs"
+
+[[test]]
+name = "cancel"
+path = "cancel.rs"
+
+[[test]]
+name = "merkle_depth32"
+path = "merkle_depth32.rs"
+
+[[test]]
+name = "cu_budget"
+path = "cu_budget.rs"
