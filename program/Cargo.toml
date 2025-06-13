@@ -1,0 +1,32 @@
+[package]
+name = "svm-escrow"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svm_escrow"
+
+[dependencies]
+pinocchio = { workspace = true }
+solana-program = { workspace = true }
+thiserror = { workspace = true }
+num-derive = { workspace = true }
+num-traits = { workspace = true }
+
+[dev-dependencies]
+solana-program-test = { workspace = true }
+solana-sdk = { workspace = true }
+
+[features]
+no-entrypoint = []
+no-idl = []
+cpi = ["no-entrypoint"]
+default = []
+
+[[bin]]
+name = "svm-escrow"
+path = "src/entrypoint.rs"

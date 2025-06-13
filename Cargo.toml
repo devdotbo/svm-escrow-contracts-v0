@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "program",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["1inch"]
+license = "MIT"
+repository = "https://github.com/1inch/atomic-swap-v2"
+
+[workspace.dependencies]
+solana-program = "2.1"
+solana-sdk = "2.1"
+solana-program-test = "2.1"
+pinocchio = "0.5"
+thiserror = "1.0"
+num-derive = "0.4"
+num-traits = "0.2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+
+[profile.release.build-override]
+opt-level = 3
