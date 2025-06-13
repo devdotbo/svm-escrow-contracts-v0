@@ -167,6 +167,15 @@ fn next_account_info<'a, 'b: 'a>(
 }
 
 /// Process Withdraw/WithdrawTo instructions
+/// Accounts expected:
+/// 0. [WRITE] Escrow PDA account
+/// 1. [WRITE] Maker token account (destination)
+/// 2. [WRITE] Escrow token account (source)
+/// 3. [WRITE] Caller account (receives safety deposit)
+/// 4. [] Token program
+/// 5. [] Clock sysvar
+/// 6. [] System program
+/// 7. [WRITE, optional] Target account (for WithdrawTo)
 fn process_withdraw(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -174,9 +183,180 @@ fn process_withdraw(
     proof: Vec<[u8; 32]>,
     target: Option<Pubkey>,
 ) -> ProgramResult {
-    // TODO: Implement
-    solana_program::msg!("Withdraw instruction");
+    let account_info_iter = &mut accounts.iter();
+    
+    let escrow_info = next_account_info(account_info_iter)?;
+    let maker_token_info = next_account_info(account_info_iter)?;
+    let escrow_token_info = next_account_info(account_info_iter)?;
+    let caller_info = next_account_info(account_info_iter)?;
+    let token_program_info = next_account_info(account_info_iter)?;
+    let clock_info = next_account_info(account_info_iter)?;
+    let system_program_info = next_account_info(account_info_iter)?;
+    
+    // Get target account if WithdrawTo
+    let target_token_info = if target.is_some() {
+        Some(next_account_info(account_info_iter)?)
+    } else {
+        None
+    };
+    
+    // Load and verify escrow
+    let escrow = Escrow::from_account_info(escrow_info)?;
+    if escrow_info.owner != program_id {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    
+    // Verify PDA
+    let (expected_pda, _bump) = Escrow::derive_pda(
+        &escrow.maker,
+        &escrow.resolver,
+        &escrow.hash_secret,
+        program_id,
+    );
+    if escrow_info.key != &expected_pda {
+        return Err(EscrowError::InvalidPDA.into());
+    }
+    
+    // Verify secret using keccak256 (260 CU as per spec)
+    let computed_hash = {
+        use solana_program::keccak;
+        keccak::hashv(&[&secret]).to_bytes()
+    };
+    
+    if computed_hash != escrow.hash_secret {
+        return Err(EscrowError::InvalidSecret.into());
+    }
+    
+    // Get current time
+    let clock = Clock::from_account_info(clock_info)?;
+    let current_time = clock.unix_timestamp as u64;
+    
+    // Check timelocks
+    let exclusive_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_DST_EXCLUSIVE_WITHDRAW];
+    let public_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_DST_PUBLIC_WITHDRAW];
+    
+    if current_time < exclusive_time {
+        return Err(EscrowError::TimelockNotExpired.into());
+    }
+    
+    // During exclusive phase, only resolver can withdraw
+    if current_time < public_time && caller_info.key != &escrow.resolver {
+        return Err(EscrowError::Unauthorized.into());
+    }
+    
+    // Verify Merkle proof if needed
+    if escrow.merkle_root != [0u8; 32] {
+        verify_merkle_proof(&secret, &proof, &escrow.merkle_root, escrow.filled_index)?;
+        
+        // Increment filled index (will be saved later)
+        let escrow_mut = Escrow::from_account_info_mut(escrow_info)?;
+        escrow_mut.filled_index = escrow_mut.filled_index
+            .checked_add(1)
+            .ok_or(EscrowError::Overflow)?;
+    }
+    
+    // Determine destination token account
+    let destination_token_info = if let Some(ref target_account) = target_token_info {
+        target_account
+    } else {
+        maker_token_info
+    };
+    
+    // Transfer tokens from escrow to destination
+    let transfer_ix = spl_token::instruction::transfer(
+        &spl_token::id(),
+        escrow_token_info.key,
+        destination_token_info.key,
+        escrow_info.key,
+        &[],
+        escrow.amount,
+    )?;
+    
+    let seeds = &[
+        Escrow::SEED_PREFIX,
+        escrow.maker.as_ref(),
+        escrow.resolver.as_ref(),
+        &escrow.hash_secret,
+        &[Escrow::ROLE_BYTE_DST],
+        &[escrow.bump],
+    ];
+    
+    invoke_signed(
+        &transfer_ix,
+        &[
+            escrow_token_info.clone(),
+            destination_token_info.clone(),
+            escrow_info.clone(),
+            token_program_info.clone(),
+        ],
+        &[seeds],
+    )?;
+    
+    // Transfer safety deposit to caller (last to prevent re-entrancy)
+    **escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
+    **caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
+    
+    // Close PDA if single-fill or last Merkle leaf
+    let should_close = escrow.merkle_root == [0u8; 32] || 
+                      escrow.filled_index >= (1u32 << 32); // Max 2^32 leaves
+    
+    if should_close {
+        // Transfer remaining lamports to caller and zero the account
+        let remaining_lamports = escrow_info.lamports();
+        **escrow_info.try_borrow_mut_lamports()? = 0;
+        **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
+    }
+    
+    solana_program::msg!("Withdraw successful for escrow {}", escrow_info.key);
+    
     Ok(())
+}
+
+/// Verify Merkle proof for batch fills
+fn verify_merkle_proof(
+    leaf: &[u8; 32],
+    proof: &[[u8; 32]],
+    root: &[u8; 32],
+    index: u32,
+) -> ProgramResult {
+    if proof.len() > 32 {
+        return Err(EscrowError::MerkleProofTooDeep.into());
+    }
+    
+    let mut computed_hash = *leaf;
+    let mut idx = index;
+    
+    for (i, sibling) in proof.iter().enumerate() {
+        if i >= 32 {
+            // Hard cap at 32 levels as per spec
+            break;
+        }
+        
+        computed_hash = if idx & 1 == 0 {
+            // Current node is left child
+            hash_pair(&computed_hash, sibling)
+        } else {
+            // Current node is right child
+            hash_pair(sibling, &computed_hash)
+        };
+        
+        idx >>= 1;
+    }
+    
+    if computed_hash != *root {
+        return Err(EscrowError::InvalidMerkleProof.into());
+    }
+    
+    Ok(())
+}
+
+/// Hash two nodes for Merkle tree
+fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    use solana_program::keccak;
+    let mut data = [0u8; 64];
+    data[..32].copy_from_slice(left);
+    data[32..].copy_from_slice(right);
+    keccak::hashv(&[&data]).to_bytes()
 }
 
 /// Process Cancel/PublicCancel instructions
@@ -191,15 +371,32 @@ fn process_cancel(
 }
 
 /// Process PublicWithdraw instruction
+/// Similar to Withdraw but enforces public phase timing
 fn process_public_withdraw(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     secret: [u8; 32],
     proof: Vec<[u8; 32]>,
 ) -> ProgramResult {
-    // TODO: Implement
-    solana_program::msg!("PublicWithdraw instruction");
-    Ok(())
+    let account_info_iter = &mut accounts.iter();
+    
+    let escrow_info = next_account_info(account_info_iter)?;
+    let clock_info = next_account_info(account_info_iter)?;
+    
+    // Load escrow to check public withdraw timelock
+    let escrow = Escrow::from_account_info(escrow_info)?;
+    let clock = Clock::from_account_info(clock_info)?;
+    let current_time = clock.unix_timestamp as u64;
+    
+    // Ensure we're in public withdraw phase
+    let public_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_DST_PUBLIC_WITHDRAW];
+    
+    if current_time < public_time {
+        return Err(EscrowError::TimelockNotExpired.into());
+    }
+    
+    // Delegate to regular withdraw (which will allow anyone since we're past public time)
+    process_withdraw(program_id, accounts, secret, proof, None)
 }
 
 /// Process RescueFunds instruction
