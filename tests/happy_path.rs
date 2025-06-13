@@ -8,6 +8,7 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
+use spl_token;
 use svm_escrow::{
     instruction::{EscrowInit, EscrowInstruction},
     state::Escrow,
@@ -15,6 +16,8 @@ use svm_escrow::{
 
 mod common;
 use common::*;
+
+use std::convert::TryInto;
 
 #[tokio::test]
 async fn test_happy_path() {
@@ -70,13 +73,46 @@ async fn test_happy_path() {
         bump,
     };
     
-    // TODO: Pack instruction data
-    // TODO: Create and send transaction
-    // TODO: Verify escrow was created correctly
-    // TODO: Test withdraw with secret
-    // TODO: Verify tokens transferred and PDA closed
+    // Pack create instruction
+    let create_ix_data = pack_escrow_instruction(&EscrowInstruction::CreateDstEscrow(init));
     
-    println!("Happy path test - TODO: Complete implementation");
+    // Create escrow instruction
+    let create_escrow_ix = Instruction {
+        program_id: svm_escrow_program_id(),
+        accounts: vec![
+            AccountMeta::new(payer.pubkey(), true),     // Payer
+            AccountMeta::new_readonly(resolver.pubkey(), true), // Resolver
+            AccountMeta::new(escrow_pda, false),        // Escrow PDA
+            AccountMeta::new_readonly(system_program::id(), false), // System
+            AccountMeta::new_readonly(spl_token::id(), false), // Token program
+            AccountMeta::new_readonly(solana_sdk::sysvar::clock::id(), false), // Clock
+        ],
+        data: create_ix_data,
+    };
+    
+    // Send create transaction
+    let mut transaction = Transaction::new_with_payer(
+        &[create_escrow_ix],
+        Some(&payer.pubkey()),
+    );
+    transaction.sign(&[&payer, &resolver], recent_blockhash);
+    
+    let result = banks_client.process_transaction(transaction).await;
+    assert!(result.is_ok(), "Create escrow failed: {:?}", result);
+    
+    // Verify escrow was created
+    let escrow_account = banks_client.get_account(escrow_pda).await.unwrap();
+    assert!(escrow_account.is_some(), "Escrow account should exist");
+    
+    let escrow_account = escrow_account.unwrap();
+    assert_eq!(escrow_account.owner, svm_escrow_program_id());
+    assert_eq!(escrow_account.data.len(), Escrow::LEN);
+    
+    // TODO: Set up token accounts for testing withdraw
+    // TODO: Advance clock to allow withdraw
+    // TODO: Test withdraw with correct secret
+    
+    println!("Escrow created successfully at {}", escrow_pda);
 }
 
 /// Helper to calculate keccak256 hash
@@ -89,6 +125,6 @@ fn keccak256(data: &[u8]) -> [u8; 32] {
 
 /// Get program ID for tests
 fn svm_escrow_program_id() -> Pubkey {
-    // This should match the actual program ID
-    Pubkey::new_unique()
+    // Use the same test program ID as in common module
+    test_program_id()
 }

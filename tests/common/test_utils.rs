@@ -40,11 +40,19 @@ pub fn create_token_account(mint: &Pubkey, owner: &Pubkey, amount: u64) -> (Pubk
 /// Pack escrow instruction for testing
 pub fn pack_escrow_instruction(instruction: &svm_escrow::instruction::EscrowInstruction) -> Vec<u8> {
     use svm_escrow::instruction::{EscrowInstruction, EscrowInit};
+    use std::mem;
     
     match instruction {
         EscrowInstruction::CreateDstEscrow(init) => {
             let mut data = vec![0u8]; // Discriminator
-            data.extend_from_slice(&bincode::serialize(init).unwrap());
+            // Pack the struct directly as bytes (matching on-chain expectation)
+            let init_bytes = unsafe {
+                std::slice::from_raw_parts(
+                    init as *const EscrowInit as *const u8,
+                    mem::size_of::<EscrowInit>(),
+                )
+            };
+            data.extend_from_slice(init_bytes);
             data
         }
         EscrowInstruction::Withdraw { secret, proof } => {
