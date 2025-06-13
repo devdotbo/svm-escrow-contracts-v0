@@ -360,13 +360,112 @@ fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
 }
 
 /// Process Cancel/PublicCancel instructions
+/// Accounts expected:
+/// 0. [WRITE] Escrow PDA account
+/// 1. [WRITE] Resolver token account (destination)
+/// 2. [WRITE] Escrow token account (source)
+/// 3. [WRITE] Caller account (receives safety deposit)
+/// 4. [] Token program
+/// 5. [] Clock sysvar
+/// 6. [] System program
 fn process_cancel(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     is_public: bool,
 ) -> ProgramResult {
-    // TODO: Implement
-    solana_program::msg!("Cancel instruction");
+    let account_info_iter = &mut accounts.iter();
+    
+    let escrow_info = next_account_info(account_info_iter)?;
+    let resolver_token_info = next_account_info(account_info_iter)?;
+    let escrow_token_info = next_account_info(account_info_iter)?;
+    let caller_info = next_account_info(account_info_iter)?;
+    let token_program_info = next_account_info(account_info_iter)?;
+    let clock_info = next_account_info(account_info_iter)?;
+    let system_program_info = next_account_info(account_info_iter)?;
+    
+    // Load and verify escrow
+    let escrow = Escrow::from_account_info(escrow_info)?;
+    if escrow_info.owner != program_id {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    
+    // Verify PDA
+    let (expected_pda, _bump) = Escrow::derive_pda(
+        &escrow.maker,
+        &escrow.resolver,
+        &escrow.hash_secret,
+        program_id,
+    );
+    if escrow_info.key != &expected_pda {
+        return Err(EscrowError::InvalidPDA.into());
+    }
+    
+    // Get current time
+    let clock = Clock::from_account_info(clock_info)?;
+    let current_time = clock.unix_timestamp as u64;
+    
+    // Check timelocks
+    let exclusive_cancel_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_DST_EXCLUSIVE_CANCEL];
+    let public_cancel_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_DST_PUBLIC_CANCEL];
+    
+    if is_public {
+        // PublicCancel - anyone can call after public cancel time
+        if current_time < public_cancel_time {
+            return Err(EscrowError::TimelockNotExpired.into());
+        }
+    } else {
+        // Cancel - only resolver during exclusive period
+        if current_time < exclusive_cancel_time {
+            return Err(EscrowError::TimelockNotExpired.into());
+        }
+        
+        // During exclusive phase, only resolver can cancel
+        if current_time < public_cancel_time && caller_info.key != &escrow.resolver {
+            return Err(EscrowError::Unauthorized.into());
+        }
+    }
+    
+    // Transfer tokens back to resolver
+    let transfer_ix = spl_token::instruction::transfer(
+        &spl_token::id(),
+        escrow_token_info.key,
+        resolver_token_info.key,
+        escrow_info.key,
+        &[],
+        escrow.amount,
+    )?;
+    
+    let seeds = &[
+        Escrow::SEED_PREFIX,
+        escrow.maker.as_ref(),
+        escrow.resolver.as_ref(),
+        &escrow.hash_secret,
+        &[Escrow::ROLE_BYTE_DST],
+        &[escrow.bump],
+    ];
+    
+    invoke_signed(
+        &transfer_ix,
+        &[
+            escrow_token_info.clone(),
+            resolver_token_info.clone(),
+            escrow_info.clone(),
+            token_program_info.clone(),
+        ],
+        &[seeds],
+    )?;
+    
+    // Transfer safety deposit to caller as incentive (last to prevent re-entrancy)
+    **escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
+    **caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
+    
+    // Close PDA - transfer remaining lamports to caller
+    let remaining_lamports = escrow_info.lamports();
+    **escrow_info.try_borrow_mut_lamports()? = 0;
+    **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
+    
+    solana_program::msg!("Cancel successful for escrow {}", escrow_info.key);
+    
     Ok(())
 }
 
@@ -400,11 +499,95 @@ fn process_public_withdraw(
 }
 
 /// Process RescueFunds instruction
+/// Accounts expected:
+/// 0. [WRITE] Escrow PDA account
+/// 1. [WRITE] Resolver account (receives funds)
+/// 2. [WRITE] Escrow token account (if any tokens remain)
+/// 3. [] Token program
+/// 4. [] Clock sysvar
+/// 5. [] System program
 fn process_rescue_funds(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
 ) -> ProgramResult {
-    // TODO: Implement
-    solana_program::msg!("RescueFunds instruction");
+    let account_info_iter = &mut accounts.iter();
+    
+    let escrow_info = next_account_info(account_info_iter)?;
+    let resolver_info = next_account_info(account_info_iter)?;
+    let escrow_token_info = next_account_info(account_info_iter)?;
+    let token_program_info = next_account_info(account_info_iter)?;
+    let clock_info = next_account_info(account_info_iter)?;
+    let _system_program_info = next_account_info(account_info_iter)?;
+    
+    // Load and verify escrow
+    let escrow = Escrow::from_account_info(escrow_info)?;
+    if escrow_info.owner != program_id {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    
+    // Verify PDA
+    let (expected_pda, _bump) = Escrow::derive_pda(
+        &escrow.maker,
+        &escrow.resolver,
+        &escrow.hash_secret,
+        program_id,
+    );
+    if escrow_info.key != &expected_pda {
+        return Err(EscrowError::InvalidPDA.into());
+    }
+    
+    // Get current time
+    let clock = Clock::from_account_info(clock_info)?;
+    let current_time = clock.unix_timestamp as u64;
+    
+    // Check rescue timelock
+    let rescue_time = escrow.deployed_at + escrow.timelocks[Escrow::TL_RESCUE];
+    
+    if current_time < rescue_time {
+        return Err(EscrowError::TimelockNotExpired.into());
+    }
+    
+    // If there are any tokens remaining, transfer them to resolver
+    if escrow.amount > 0 {
+        // Get resolver token account from the provided account
+        let resolver_token_info = next_account_info(account_info_iter)?;
+        
+        let transfer_ix = spl_token::instruction::transfer(
+            &spl_token::id(),
+            escrow_token_info.key,
+            resolver_token_info.key,
+            escrow_info.key,
+            &[],
+            escrow.amount,
+        )?;
+        
+        let seeds = &[
+            Escrow::SEED_PREFIX,
+            escrow.maker.as_ref(),
+            escrow.resolver.as_ref(),
+            &escrow.hash_secret,
+            &[Escrow::ROLE_BYTE_DST],
+            &[escrow.bump],
+        ];
+        
+        invoke_signed(
+            &transfer_ix,
+            &[
+                escrow_token_info.clone(),
+                resolver_token_info.clone(),
+                escrow_info.clone(),
+                token_program_info.clone(),
+            ],
+            &[seeds],
+        )?;
+    }
+    
+    // Transfer all remaining lamports to resolver and close PDA
+    let remaining_lamports = escrow_info.lamports();
+    **escrow_info.try_borrow_mut_lamports()? = 0;
+    **resolver_info.try_borrow_mut_lamports()? += remaining_lamports;
+    
+    solana_program::msg!("Rescue funds successful for escrow {}", escrow_info.key);
+    
     Ok(())
 }
