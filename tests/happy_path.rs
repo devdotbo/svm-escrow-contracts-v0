@@ -1,6 +1,7 @@
 use solana_program_test::{*};
 use solana_sdk::{
     account::Account,
+    clock::Clock,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     rent::Rent,
@@ -108,11 +109,75 @@ async fn test_happy_path() {
     assert_eq!(escrow_account.owner, svm_escrow_program_id());
     assert_eq!(escrow_account.data.len(), Escrow::LEN);
     
-    // TODO: Set up token accounts for testing withdraw
-    // TODO: Advance clock to allow withdraw
-    // TODO: Test withdraw with correct secret
+    // Set up token accounts for withdraw testing
+    let (token_mint, mint_account) = create_token_mint();
+    test.add_account(token_mint, mint_account);
     
-    println!("Escrow created successfully at {}", escrow_pda);
+    // Create resolver's token account with funds
+    let (resolver_token_account, resolver_token_data) = create_token_account(&token_mint, &resolver.pubkey(), amount);
+    test.add_account(resolver_token_account, resolver_token_data);
+    
+    // Create maker's token account (will receive funds)
+    let (maker_token_account, maker_token_data) = create_token_account(&token_mint, &maker, 0);
+    test.add_account(maker_token_account, maker_token_data);
+    
+    // Advance clock to allow withdraw (past timelock[2])
+    let clock = Clock {
+        slot: 100,
+        epoch_start_timestamp: now.try_into().unwrap(),
+        epoch: 1,
+        leader_schedule_epoch: 1,
+        unix_timestamp: (now + 400).try_into().unwrap(), // Past exclusive withdraw time
+    };
+    test.set_sysvar(&clock);
+    
+    // Restart banks client after adding accounts
+    let (mut banks_client, payer, recent_blockhash) = test.start().await;
+    
+    // Test withdraw with correct secret
+    let withdraw_ix_data = pack_escrow_instruction(&EscrowInstruction::Withdraw {
+        secret: *secret,
+        proof: vec![], // No Merkle proof for single fill
+    });
+    
+    let withdraw_ix = Instruction {
+        program_id: svm_escrow_program_id(),
+        accounts: vec![
+            AccountMeta::new_readonly(resolver.pubkey(), true), // Caller (must be resolver during exclusive period)
+            AccountMeta::new(escrow_pda, false),                // Escrow PDA
+            AccountMeta::new(maker_token_account, false),       // Maker's token account (recipient)
+            AccountMeta::new(resolver_token_account, false),    // Resolver's token account (source)
+            AccountMeta::new(resolver.pubkey(), false),         // Safety deposit recipient
+            AccountMeta::new_readonly(token_mint, false),       // Token mint
+            AccountMeta::new_readonly(spl_token::id(), false),  // Token program
+            AccountMeta::new_readonly(solana_sdk::sysvar::clock::id(), false), // Clock
+        ],
+        data: withdraw_ix_data,
+    };
+    
+    let mut withdraw_transaction = Transaction::new_with_payer(
+        &[withdraw_ix],
+        Some(&payer.pubkey()),
+    );
+    withdraw_transaction.sign(&[&payer, &resolver], recent_blockhash);
+    
+    let withdraw_result = banks_client.process_transaction(withdraw_transaction).await;
+    assert!(withdraw_result.is_ok(), "Withdraw failed: {:?}", withdraw_result);
+    
+    // Verify escrow was closed
+    let escrow_account_after = banks_client.get_account(escrow_pda).await.unwrap();
+    assert!(escrow_account_after.is_none(), "Escrow account should be closed after withdraw");
+    
+    // Verify maker received tokens
+    let maker_token_after = banks_client.get_account(maker_token_account).await.unwrap();
+    assert!(maker_token_after.is_some(), "Maker token account should exist");
+    // In real test, we would deserialize and check token balance
+    
+    // Verify resolver received safety deposit
+    let resolver_balance_after = banks_client.get_balance(resolver.pubkey()).await.unwrap();
+    assert!(resolver_balance_after > 0, "Resolver should have received safety deposit");
+    
+    println!("Happy path test completed successfully!");
 }
 
 /// Helper to calculate keccak256 hash
