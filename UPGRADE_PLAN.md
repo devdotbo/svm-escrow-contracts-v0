@@ -12,10 +12,10 @@ Upgrade the SVM escrow contracts project to:
 
 ### Current Dependencies
 - pinocchio: 0.5 → 0.8.4
-- solana-program: 2.1 → 2.3.0 (only if absolutely necessary)
-- solana-sdk: 2.1 → 2.3.0 (only in tests)
-- solana-program-test: 2.1 → 2.3.0 (tests only)
-- spl-token: 6.0 → latest
+- solana-program: 2.1 → 2.2.16 (only if absolutely necessary)
+- solana-sdk: 2.1 → 2.2.16 (only in tests)
+- solana-program-test: 2.1 → 2.2.16 (tests only)
+- spl-token: 6.0 → latest compatible with 2.2.x
 - thiserror: 1.0 → latest
 - num-derive: 0.4 → latest
 - num-traits: 0.2 → latest
@@ -23,9 +23,11 @@ Upgrade the SVM escrow contracts project to:
 - tokio: 1.x → latest
 
 ### Compatibility Notes
-- **Version Alignment**: solana-program, solana-sdk, and solana-program-test MUST use the same version (2.3.0)
-- **SPL Token**: May need specific version compatible with solana-program 2.3.0
-- **Rust Version**: Solana 2.3.0 likely requires Rust 1.75+, our target 1.87.0 is compatible
+- **Version Alignment**: solana-program, solana-sdk, and solana-program-test MUST use the same version (2.2.16)
+- **Production Ready**: v2.2.16 is the latest stable release for Mainnet Beta (v2.3.0 is testnet only)
+- **SPL Token**: May need specific version compatible with solana-program 2.2.x
+- **Rust Version**: Our target 1.87.0 is compatible
+- **Ubuntu**: Requires Ubuntu 22.04 or later (20.04 is EOL)
 
 ### solana-program Usage Analysis
 Currently using solana-program for:
@@ -93,10 +95,10 @@ Currently using solana-program for:
 ```toml
 [dev-dependencies]
 # These MUST all be the same version
-solana-program-test = "2.3.0"
-solana-sdk = "2.3.0"
+solana-program-test = "2.2.16"
+solana-sdk = "2.2.16"
 # If we need solana-program for keccak256 fallback
-solana-program = "2.3.0"
+solana-program = "2.2.16"
 ```
 
 ### Update test utilities:

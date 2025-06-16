@@ -7,13 +7,13 @@ When upgrading Solana dependencies, **ALL** Solana crates must use the same vers
 ```toml
 [dependencies]
 # Program dependencies (if needed)
-solana-program = "2.3.0"  # Only if pinocchio can't replace it
+solana-program = "2.2.16"  # Only if pinocchio can't replace it
 
 [dev-dependencies]
 # Test dependencies - MUST match
-solana-program-test = "2.3.0"
-solana-sdk = "2.3.0"
-solana-program = "2.3.0"  # May be needed for test utilities
+solana-program-test = "2.2.16"
+solana-sdk = "2.2.16"
+solana-program = "2.2.16"  # May be needed for test utilities
 ```
 
 ## Why Version Alignment Matters
@@ -31,7 +31,7 @@ Newer versions may have different feature flags:
 ### 3. **Dependency Diamond Problem**
 ```
 Your Program
-├── solana-program 2.3.0
+├── solana-program 2.2.16
 └── spl-token 6.0
     └── solana-program 2.1.0  ❌ CONFLICT!
 ```
@@ -43,8 +43,11 @@ SPL Token versions are tied to Solana versions:
 | SPL Token | Compatible Solana |
 |-----------|------------------|
 | 6.0       | 2.0-2.1         |
-| 7.0       | 2.2-2.3         |
+| 6.1       | 2.2.x           |
+| 7.0       | 2.3.x (testnet) |
 | 8.0       | 2.4+            |
+
+For Mainnet Beta with Solana 2.2.16, use SPL Token 6.1.x
 
 ## Pinocchio Integration
 
@@ -68,19 +71,21 @@ pinocchio = "0.8.4"
 # No solana-program!
 
 [dev-dependencies]
-solana-program-test = "2.3.0"
-solana-sdk = "2.3.0"
+solana-program-test = "2.2.16"
+solana-sdk = "2.2.16"
+spl-token = "6.1"  # Compatible with 2.2.x
 ```
 
 ### Option 2: Minimal solana-program
 ```toml
 [dependencies]
 pinocchio = "0.8.4"
-solana-program = { version = "2.3.0", default-features = false }
+solana-program = { version = "2.2.16", default-features = false }
 
 [dev-dependencies]
-solana-program-test = "2.3.0"
-solana-sdk = "2.3.0"
+solana-program-test = "2.2.16"
+solana-sdk = "2.2.16"
+spl-token = "6.1"
 ```
 
 ## Testing Compatibility
@@ -128,8 +133,8 @@ Create `.cargo/config.toml`:
 ```toml
 [patch.crates-io]
 # Force all deps to use same version
-solana-program = { version = "=2.3.0" }
-solana-sdk = { version = "=2.3.0" }
+solana-program = { version = "=2.2.16" }
+solana-sdk = { version = "=2.2.16" }
 ```
 
 ## Verification Commands
