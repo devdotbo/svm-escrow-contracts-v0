@@ -12,9 +12,9 @@ Upgrade the SVM escrow contracts project to:
 
 ### Current Dependencies
 - pinocchio: 0.5 → 0.8.4
-- solana-program: 2.1 → 2.2.16 (only if absolutely necessary)
-- solana-sdk: 2.1 → 2.2.16 (only in tests)
-- solana-program-test: 2.1 → 2.2.16 (tests only)
+- solana-program: 2.1 → =2.2.16 (only if absolutely necessary)
+- solana-sdk: 2.1 → =2.2.16 (only in tests)
+- solana-program-test: 2.1 → =2.2.16 (tests only)
 - spl-token: 6.0 → latest compatible with 2.2.x
 - thiserror: 1.0 → latest
 - num-derive: 0.4 → latest
@@ -94,11 +94,11 @@ Currently using solana-program for:
 ### Version Compatibility Critical:
 ```toml
 [dev-dependencies]
-# These MUST all be the same version
-solana-program-test = "2.2.16"
-solana-sdk = "2.2.16"
+# These MUST all be the same version with exact pinning
+solana-program-test = "=2.2.16"
+solana-sdk = "=2.2.16"
 # If we need solana-program for keccak256 fallback
-solana-program = "2.2.16"
+solana-program = "=2.2.16"
 ```
 
 ### Update test utilities:
