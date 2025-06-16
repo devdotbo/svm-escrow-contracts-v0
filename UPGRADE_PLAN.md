@@ -14,12 +14,18 @@ Upgrade the SVM escrow contracts project to:
 - pinocchio: 0.5 → 0.8.4
 - solana-program: 2.1 → 2.3.0 (only if absolutely necessary)
 - solana-sdk: 2.1 → 2.3.0 (only in tests)
+- solana-program-test: 2.1 → 2.3.0 (tests only)
 - spl-token: 6.0 → latest
 - thiserror: 1.0 → latest
 - num-derive: 0.4 → latest
 - num-traits: 0.2 → latest
 - bincode: 1.3 → latest
 - tokio: 1.x → latest
+
+### Compatibility Notes
+- **Version Alignment**: solana-program, solana-sdk, and solana-program-test MUST use the same version (2.3.0)
+- **SPL Token**: May need specific version compatible with solana-program 2.3.0
+- **Rust Version**: Solana 2.3.0 likely requires Rust 1.75+, our target 1.87.0 is compatible
 
 ### solana-program Usage Analysis
 Currently using solana-program for:
@@ -83,9 +89,20 @@ Currently using solana-program for:
 - Update to version 2.3.0
 - Keep isolated to test dependencies
 
+### Version Compatibility Critical:
+```toml
+[dev-dependencies]
+# These MUST all be the same version
+solana-program-test = "2.3.0"
+solana-sdk = "2.3.0"
+# If we need solana-program for keccak256 fallback
+solana-program = "2.3.0"
+```
+
 ### Update test utilities:
 - Ensure compatibility with new versions
 - Fix any breaking changes in test setup
+- Verify keccak256 helper function works
 
 ## Phase 6: Build and Verification
 
