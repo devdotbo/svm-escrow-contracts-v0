@@ -11,88 +11,63 @@ This program implements a trustless escrow system on Solana that works in tandem
 - **Time-locked escrows** with phased withdrawal/cancel periods
 - **Merkle tree support** for efficient batch processing (up to 32 levels)
 - **Safety deposits** to incentivize proper resolution
-- **Gas-optimized** implementation using pinocchio framework
+- **Zero-copy operations** using pinocchio framework
 
-## Architecture
+## Quick Start
 
-### Program Structure
-```
-fusion-svm/
-├── program/           # On-chain program (pinocchio-based)
-├── tests/            # Integration tests
-├── docs/             # Additional documentation
-└── .github/          # CI/CD workflows
-```
-
-### Core Components
-
-1. **Escrow PDA** - Stores swap details and enforces time-based logic
-2. **Instruction Handlers** - Process create, withdraw, cancel operations
-3. **Merkle Verifier** - Validates proofs for batch fills
-4. **Timelock System** - 7-stage security model matching EVM side
-
-## Setup
-
-### Prerequisites
-- Rust 1.77.0 or later
-- Solana CLI tools
-- cargo-build-bpf
-
-### Installation
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd svm-escrow-contracts
+# Build
+cargo build-sbf --manifest-path program/Cargo.toml -- --release
 
-# Install dependencies
-cargo build
-
-# Build BPF program
-cargo build-bpf --manifest-path program/Cargo.toml
-```
-
-### Testing
-```bash
-# Run all tests
+# Test
 cargo test -- --nocapture
 
-# Run specific test suite
-cargo test happy_path -- --nocapture
-
-# Fuzz testing
-cd program && cargo fuzz run merkle_proof -- -runs=10000
+# Check code
+cargo fmt -- --check
+cargo clippy -- -D warnings
 ```
 
-## Usage
+## Documentation
 
-### Creating an Escrow
-The resolver creates a destination escrow with matching parameters from the source chain:
-- Maker address (from EVM)
-- Secret hash (keccak256)
-- Token mint and amount
-- Timelock schedule
-- Optional Merkle root for batch fills
+- **[Quick Reference](docs/development/QUICK_REFERENCE.md)** - Essential commands and constraints
+- **[Upgrade Status](UPGRADE_STATUS.md)** - Current upgrade progress
+- **[Upgrade Plan](UPGRADE_PLAN.md)** - Detailed upgrade roadmap
+- **[Integration Guide](docs/integration/go-coordinator.md)** - Go coordinator interface
+- **[Dependency Guide](docs/development/DEPENDENCY_COMPATIBILITY.md)** - Version alignment
 
-### Withdrawing Funds
-1. **Exclusive Phase**: Only resolver can withdraw (timelock[2])
-2. **Public Phase**: Anyone can withdraw with valid secret (timelock[3])
+## Project Structure
 
-### Cancellation
-Similar phased approach for cancellations (timelock[4] and timelock[5])
+```
+svm-escrow-contracts/
+├── program/              # On-chain program (pinocchio)
+│   └── src/
+│       ├── processor.rs  # Core business logic
+│       ├── state.rs      # Escrow data structure
+│       └── instruction.rs # Instruction definitions
+├── tests/                # Integration tests
+├── docs/                 # Documentation
+│   ├── development/      # Development guides
+│   ├── integration/      # Integration specs
+│   └── history/          # Historical docs
+└── .github/              # CI/CD workflows
+```
+
+## Core Instructions
+
+1. **CreateDstEscrow** - Initialize escrow with safety deposit
+2. **Withdraw/WithdrawTo** - Claim with secret + optional Merkle proof
+3. **Cancel/PublicCancel** - Refund after timelock
+4. **PublicWithdraw** - Public phase withdrawal
+5. **RescueFunds** - Cleanup dust after final timeout
 
 ## Security Model
 
-The program implements multiple layers of security:
-- **Time-based phases** prevent front-running and ensure fairness
-- **Merkle proofs** prevent double-spending in batch scenarios
-- **Safety deposits** incentivize proper behavior
-- **Rent-exemption** ensures PDA persistence
-- **Overflow protection** on all arithmetic operations
-
-## Integration
-
-See `docs/integration.md` for detailed integration instructions with the Go coordinator and EVM contracts.
+- **Time-based phases** prevent front-running
+- **Merkle proofs** enable batch processing
+- **Safety deposits** incentivize resolution
+- **Immutable program** (no upgrade authority)
+- **Re-entrancy protection** (transfers last)
 
 ## License
 
-[License details here]
+MIT
