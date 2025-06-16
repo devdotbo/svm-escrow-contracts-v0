@@ -1,4 +1,4 @@
-use pinocchio::{account_info::AccountInfo, pubkey::Pubkey, ProgramResult};
+use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, ProgramResult};
 
 /// Zero-copy account structure for the Escrow PDA
 /// Must match the exact field order and types from the specification
@@ -88,5 +88,3 @@ impl Escrow {
         Ok(escrow)
     }
 }
-
-use solana_program::program_error::ProgramError;

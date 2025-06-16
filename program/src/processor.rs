@@ -146,7 +146,7 @@ fn process_create_dst_escrow(
     escrow.deployed_at = clock.unix_timestamp as u64;
     escrow.bump = bump;
 
-    solana_program::msg!("Escrow created at {}", escrow_info.key);
+    pinocchio::log::info!("Escrow created at {}", escrow_info.key);
 
     Ok(())
 }
@@ -211,8 +211,8 @@ fn process_withdraw(
 
     // Verify secret using keccak256 (260 CU as per spec)
     let computed_hash = {
-        use solana_program::keccak;
-        keccak::hashv(&[&secret]).to_bytes()
+        use pinocchio::syscalls::sol_keccak256;
+        sol_keccak256(&[&secret])
     };
 
     if computed_hash != escrow.hash_secret {
@@ -299,7 +299,7 @@ fn process_withdraw(
         **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
     }
 
-    solana_program::msg!("Withdraw successful for escrow {}", escrow_info.key);
+    pinocchio::log::info!("Withdraw successful for escrow {}", escrow_info.key);
 
     Ok(())
 }
@@ -346,11 +346,11 @@ pub(crate) fn verify_merkle_proof(
 /// Hash two nodes for Merkle tree
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn hash_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    use solana_program::keccak;
+    use pinocchio::syscalls::sol_keccak256;
     let mut data = [0u8; 64];
     data[..32].copy_from_slice(left);
     data[32..].copy_from_slice(right);
-    keccak::hashv(&[&data]).to_bytes()
+    sol_keccak256(&[&data])
 }
 
 /// Process Cancel/PublicCancel instructions
@@ -455,7 +455,7 @@ fn process_cancel(program_id: &Pubkey, accounts: &[AccountInfo], is_public: bool
     **escrow_info.try_borrow_mut_lamports()? = 0;
     **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
 
-    solana_program::msg!("Cancel successful for escrow {}", escrow_info.key);
+    pinocchio::log::info!("Cancel successful for escrow {}", escrow_info.key);
 
     Ok(())
 }
@@ -575,7 +575,7 @@ fn process_rescue_funds(program_id: &Pubkey, accounts: &[AccountInfo]) -> Progra
     **escrow_info.try_borrow_mut_lamports()? = 0;
     **resolver_info.try_borrow_mut_lamports()? += remaining_lamports;
 
-    solana_program::msg!("Rescue funds successful for escrow {}", escrow_info.key);
+    pinocchio::log::info!("Rescue funds successful for escrow {}", escrow_info.key);
 
     Ok(())
 }

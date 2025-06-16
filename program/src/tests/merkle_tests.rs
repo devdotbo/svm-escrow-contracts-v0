@@ -1,6 +1,6 @@
 use crate::error::EscrowError;
 use crate::processor::{hash_pair, verify_merkle_proof};
-use solana_program::program_error::ProgramError;
+use pinocchio::program_error::ProgramError;
 
 #[test]
 fn test_hash_pair() {

@@ -1,8 +1,5 @@
 use num_derive::FromPrimitive;
-use solana_program::{
-    decode_error::DecodeError,
-    program_error::{PrintProgramError, ProgramError},
-};
+use pinocchio::program_error::ProgramError;
 use thiserror::Error;
 
 /// Custom errors for the escrow program
@@ -57,41 +54,31 @@ pub enum EscrowError {
     SafetyDepositMismatch = 15,
 }
 
-impl PrintProgramError for EscrowError {
-    fn print<E>(&self) {
-        match self {
-            EscrowError::InvalidInstruction => solana_program::msg!("Error: Invalid instruction"),
-            EscrowError::InvalidPDA => solana_program::msg!("Error: Invalid PDA"),
-            EscrowError::AlreadyInitialized => {
-                solana_program::msg!("Error: Escrow already initialized")
-            }
-            EscrowError::NotInitialized => solana_program::msg!("Error: Escrow not initialized"),
-            EscrowError::InvalidSecret => solana_program::msg!("Error: Invalid secret"),
-            EscrowError::InvalidMerkleProof => solana_program::msg!("Error: Invalid Merkle proof"),
-            EscrowError::TimelockNotExpired => solana_program::msg!("Error: Timelock not expired"),
-            EscrowError::Unauthorized => solana_program::msg!("Error: Unauthorized"),
-            EscrowError::Overflow => solana_program::msg!("Error: Arithmetic overflow"),
-            EscrowError::InvalidAccount => solana_program::msg!("Error: Invalid account"),
-            EscrowError::InsufficientFunds => solana_program::msg!("Error: Insufficient funds"),
-            EscrowError::AlreadyWithdrawn => solana_program::msg!("Error: Already withdrawn"),
-            EscrowError::InvalidFilledIndex => solana_program::msg!("Error: Invalid filled index"),
-            EscrowError::MerkleProofTooDeep => solana_program::msg!("Error: Merkle proof too deep"),
-            EscrowError::InvalidTokenMint => solana_program::msg!("Error: Invalid token mint"),
-            EscrowError::SafetyDepositMismatch => {
-                solana_program::msg!("Error: Safety deposit mismatch")
-            }
-        }
-    }
-}
-
 impl From<EscrowError> for ProgramError {
     fn from(e: EscrowError) -> Self {
+        // Log the error when converting
+        match &e {
+            EscrowError::InvalidInstruction => pinocchio::log::info!("Error: Invalid instruction"),
+            EscrowError::InvalidPDA => pinocchio::log::info!("Error: Invalid PDA"),
+            EscrowError::AlreadyInitialized => {
+                pinocchio::log::info!("Error: Escrow already initialized")
+            }
+            EscrowError::NotInitialized => pinocchio::log::info!("Error: Escrow not initialized"),
+            EscrowError::InvalidSecret => pinocchio::log::info!("Error: Invalid secret"),
+            EscrowError::InvalidMerkleProof => pinocchio::log::info!("Error: Invalid Merkle proof"),
+            EscrowError::TimelockNotExpired => pinocchio::log::info!("Error: Timelock not expired"),
+            EscrowError::Unauthorized => pinocchio::log::info!("Error: Unauthorized"),
+            EscrowError::Overflow => pinocchio::log::info!("Error: Arithmetic overflow"),
+            EscrowError::InvalidAccount => pinocchio::log::info!("Error: Invalid account"),
+            EscrowError::InsufficientFunds => pinocchio::log::info!("Error: Insufficient funds"),
+            EscrowError::AlreadyWithdrawn => pinocchio::log::info!("Error: Already withdrawn"),
+            EscrowError::InvalidFilledIndex => pinocchio::log::info!("Error: Invalid filled index"),
+            EscrowError::MerkleProofTooDeep => pinocchio::log::info!("Error: Merkle proof too deep"),
+            EscrowError::InvalidTokenMint => pinocchio::log::info!("Error: Invalid token mint"),
+            EscrowError::SafetyDepositMismatch => {
+                pinocchio::log::info!("Error: Safety deposit mismatch")
+            }
+        }
         ProgramError::Custom(e as u32)
-    }
-}
-
-impl<T> DecodeError<T> for EscrowError {
-    fn type_of() -> &'static str {
-        "EscrowError"
     }
 }

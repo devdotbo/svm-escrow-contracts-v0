@@ -1,5 +1,4 @@
-use pinocchio::pubkey::Pubkey;
-use solana_program::program_error::ProgramError;
+use pinocchio::{program_error::ProgramError, pubkey::Pubkey};
 
 /// Escrow initialization parameters
 #[derive(Clone, Copy, Debug)]
