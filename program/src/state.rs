@@ -1,4 +1,4 @@
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, ProgramResult};
+use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
 
 /// Zero-copy account structure for the Escrow PDA
 /// Must match the exact field order and types from the specification
@@ -54,7 +54,7 @@ impl Escrow {
         hash_secret: &[u8; 32],
         program_id: &Pubkey,
     ) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
+        pinocchio::pubkey::find_program_address(
             &[
                 Self::SEED_PREFIX,
                 maker.as_ref(),
@@ -72,7 +72,8 @@ impl Escrow {
             return Err(ProgramError::AccountDataTooSmall);
         }
 
-        let escrow = unsafe { &*(account.data.borrow().as_ptr() as *const Self) };
+        let data = account.try_borrow_data()?;
+        let escrow = unsafe { &*(data.as_ptr() as *const Self) };
 
         Ok(escrow)
     }
@@ -83,7 +84,8 @@ impl Escrow {
             return Err(ProgramError::AccountDataTooSmall);
         }
 
-        let escrow = unsafe { &mut *(account.data.borrow_mut().as_mut_ptr() as *mut Self) };
+        let mut data = account.try_borrow_mut_data()?;
+        let escrow = unsafe { &mut *(data.as_mut_ptr() as *mut Self) };
 
         Ok(escrow)
     }

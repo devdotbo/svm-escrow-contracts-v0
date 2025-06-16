@@ -1,56 +1,55 @@
 use num_derive::FromPrimitive;
-use pinocchio::program_error::ProgramError;
-use thiserror::Error;
+use pinocchio::{msg, program_error::ProgramError};
 
 /// Custom errors for the escrow program
-#[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
+#[derive(Clone, Debug, Eq, FromPrimitive, PartialEq)]
 pub enum EscrowError {
-    #[error("Invalid instruction")]
+    /// Invalid instruction
     InvalidInstruction = 0,
 
-    #[error("Invalid PDA")]
+    /// Invalid PDA
     InvalidPDA = 1,
 
-    #[error("Escrow already initialized")]
+    /// Escrow already initialized
     AlreadyInitialized = 2,
 
-    #[error("Escrow not initialized")]
+    /// Escrow not initialized
     NotInitialized = 3,
 
-    #[error("Invalid secret")]
+    /// Invalid secret
     InvalidSecret = 4,
 
-    #[error("Invalid Merkle proof")]
+    /// Invalid Merkle proof
     InvalidMerkleProof = 5,
 
-    #[error("Timelock not expired")]
+    /// Timelock not expired
     TimelockNotExpired = 6,
 
-    #[error("Unauthorized")]
+    /// Unauthorized
     Unauthorized = 7,
 
-    #[error("Arithmetic overflow")]
+    /// Arithmetic overflow
     Overflow = 8,
 
-    #[error("Invalid account")]
+    /// Invalid account
     InvalidAccount = 9,
 
-    #[error("Insufficient funds")]
+    /// Insufficient funds
     InsufficientFunds = 10,
 
-    #[error("Already withdrawn")]
+    /// Already withdrawn
     AlreadyWithdrawn = 11,
 
-    #[error("Invalid filled index")]
+    /// Invalid filled index
     InvalidFilledIndex = 12,
 
-    #[error("Merkle proof too deep")]
+    /// Merkle proof too deep
     MerkleProofTooDeep = 13,
 
-    #[error("Invalid token mint")]
+    /// Invalid token mint
     InvalidTokenMint = 14,
 
-    #[error("Safety deposit mismatch")]
+    /// Safety deposit mismatch
     SafetyDepositMismatch = 15,
 }
 
@@ -58,25 +57,25 @@ impl From<EscrowError> for ProgramError {
     fn from(e: EscrowError) -> Self {
         // Log the error when converting
         match &e {
-            EscrowError::InvalidInstruction => pinocchio::log::info!("Error: Invalid instruction"),
-            EscrowError::InvalidPDA => pinocchio::log::info!("Error: Invalid PDA"),
+            EscrowError::InvalidInstruction => msg!("Error: Invalid instruction"),
+            EscrowError::InvalidPDA => msg!("Error: Invalid PDA"),
             EscrowError::AlreadyInitialized => {
-                pinocchio::log::info!("Error: Escrow already initialized")
+                msg!("Error: Escrow already initialized")
             }
-            EscrowError::NotInitialized => pinocchio::log::info!("Error: Escrow not initialized"),
-            EscrowError::InvalidSecret => pinocchio::log::info!("Error: Invalid secret"),
-            EscrowError::InvalidMerkleProof => pinocchio::log::info!("Error: Invalid Merkle proof"),
-            EscrowError::TimelockNotExpired => pinocchio::log::info!("Error: Timelock not expired"),
-            EscrowError::Unauthorized => pinocchio::log::info!("Error: Unauthorized"),
-            EscrowError::Overflow => pinocchio::log::info!("Error: Arithmetic overflow"),
-            EscrowError::InvalidAccount => pinocchio::log::info!("Error: Invalid account"),
-            EscrowError::InsufficientFunds => pinocchio::log::info!("Error: Insufficient funds"),
-            EscrowError::AlreadyWithdrawn => pinocchio::log::info!("Error: Already withdrawn"),
-            EscrowError::InvalidFilledIndex => pinocchio::log::info!("Error: Invalid filled index"),
-            EscrowError::MerkleProofTooDeep => pinocchio::log::info!("Error: Merkle proof too deep"),
-            EscrowError::InvalidTokenMint => pinocchio::log::info!("Error: Invalid token mint"),
+            EscrowError::NotInitialized => msg!("Error: Escrow not initialized"),
+            EscrowError::InvalidSecret => msg!("Error: Invalid secret"),
+            EscrowError::InvalidMerkleProof => msg!("Error: Invalid Merkle proof"),
+            EscrowError::TimelockNotExpired => msg!("Error: Timelock not expired"),
+            EscrowError::Unauthorized => msg!("Error: Unauthorized"),
+            EscrowError::Overflow => msg!("Error: Arithmetic overflow"),
+            EscrowError::InvalidAccount => msg!("Error: Invalid account"),
+            EscrowError::InsufficientFunds => msg!("Error: Insufficient funds"),
+            EscrowError::AlreadyWithdrawn => msg!("Error: Already withdrawn"),
+            EscrowError::InvalidFilledIndex => msg!("Error: Invalid filled index"),
+            EscrowError::MerkleProofTooDeep => msg!("Error: Merkle proof too deep"),
+            EscrowError::InvalidTokenMint => msg!("Error: Invalid token mint"),
             EscrowError::SafetyDepositMismatch => {
-                pinocchio::log::info!("Error: Safety deposit mismatch")
+                msg!("Error: Safety deposit mismatch")
             }
         }
         ProgramError::Custom(e as u32)

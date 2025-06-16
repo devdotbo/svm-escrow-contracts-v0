@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "no-entrypoint"), no_std)]
 #![cfg_attr(not(feature = "no-entrypoint"), no_main)]
 
+#[cfg(not(feature = "no-entrypoint"))]
+extern crate alloc;
+
 pub mod error;
 pub mod instruction;
 pub mod processor;

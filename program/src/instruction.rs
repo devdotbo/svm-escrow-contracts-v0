@@ -1,5 +1,8 @@
 use pinocchio::{program_error::ProgramError, pubkey::Pubkey};
 
+extern crate alloc;
+use alloc::{vec, vec::Vec};
+
 /// Escrow initialization parameters
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
@@ -73,11 +76,11 @@ impl EscrowInstruction {
         match discriminator {
             0 => {
                 // CreateDstEscrow
-                if data.len() < std::mem::size_of::<EscrowInit>() {
+                if data.len() < core::mem::size_of::<EscrowInit>() {
                     return Err(ProgramError::InvalidInstructionData);
                 }
 
-                let init = unsafe { std::ptr::read_unaligned(data.as_ptr() as *const EscrowInit) };
+                let init = unsafe { core::ptr::read_unaligned(data.as_ptr() as *const EscrowInit) };
 
                 Ok(EscrowInstruction::CreateDstEscrow(init))
             }

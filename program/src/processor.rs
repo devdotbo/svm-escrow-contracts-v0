@@ -1,12 +1,45 @@
 use pinocchio::{
     account_info::AccountInfo,
-    entrypoint::ProgramResult,
-    program::{invoke, invoke_signed},
+    cpi::invoke_signed,
+    instruction::{AccountMeta, Instruction},
+    msg,
+    program_error::ProgramError,
     pubkey::Pubkey,
-    system_instruction,
-    sysvar::{clock::Clock, rent::Rent, Sysvar},
-    ProgramError,
+    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    ProgramResult,
 };
+
+use alloc::vec::Vec;
+
+/// Convert pinocchio Pubkey to solana_program Pubkey
+fn to_solana_pubkey(key: &Pubkey) -> spl_token::solana_program::pubkey::Pubkey {
+    spl_token::solana_program::pubkey::Pubkey::from(*key)
+}
+
+/// Invoke SPL token instruction with PDA signer
+fn invoke_spl_token_signed(
+    ix: &spl_token::solana_program::instruction::Instruction,
+    account_infos: &[&AccountInfo],
+    signers_seeds: &[&[u8]],
+) -> ProgramResult {
+    // Create pinocchio instruction
+    let mut account_metas = Vec::with_capacity(ix.accounts.len());
+    for account in &ix.accounts {
+        account_metas.push(AccountMeta {
+            pubkey: &account.pubkey.to_bytes(),
+            is_signer: account.is_signer,
+            is_writable: account.is_writable,
+        });
+    }
+    
+    let pinocchio_ix = pinocchio::instruction::Instruction {
+        program_id: &ix.program_id.to_bytes(),
+        accounts: account_metas.leak(), // Safe in transaction context
+        data: &ix.data,
+    };
+    
+    invoke_signed(&pinocchio_ix, account_infos, &[signers_seeds])
+}
 
 use crate::{
     error::EscrowError,
@@ -66,15 +99,15 @@ fn process_create_dst_escrow(
     let clock_info = next_account_info(account_info_iter)?;
 
     // Verify signers
-    if !payer_info.is_signer {
+    if !payer_info.is_signer() {
         return Err(EscrowError::Unauthorized.into());
     }
-    if !resolver_info.is_signer {
+    if !resolver_info.is_signer() {
         return Err(EscrowError::Unauthorized.into());
     }
 
     // Verify resolver matches the init param
-    if resolver_info.key != &init.resolver {
+    if resolver_info.key() != &init.resolver {
         return Err(EscrowError::Unauthorized.into());
     }
 
@@ -82,7 +115,7 @@ fn process_create_dst_escrow(
     let (expected_pda, bump) =
         Escrow::derive_pda(&init.maker, &init.resolver, &init.hash_secret, program_id);
 
-    if escrow_info.key != &expected_pda {
+    if escrow_info.key() != &expected_pda {
         return Err(EscrowError::InvalidPDA.into());
     }
 
@@ -116,19 +149,31 @@ fn process_create_dst_escrow(
         &[bump],
     ];
 
-    invoke_signed(
-        &system_instruction::create_account(
-            payer_info.key,
-            escrow_info.key,
-            total_lamports,
-            Escrow::LEN as u64,
-            program_id,
-        ),
-        &[
-            payer_info.clone(),
-            escrow_info.clone(),
-            system_program_info.clone(),
+    // System program ID
+    const SYSTEM_PROGRAM_ID: Pubkey = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    
+    // Create account instruction data
+    let mut create_account_data = [0u8; 52];
+    create_account_data[0..4].copy_from_slice(&[0, 0, 0, 0]); // CreateAccount instruction
+    create_account_data[4..12].copy_from_slice(&total_lamports.to_le_bytes());
+    create_account_data[12..20].copy_from_slice(&(Escrow::LEN as u64).to_le_bytes());
+    create_account_data[20..52].copy_from_slice(program_id.as_ref());
+    
+    let create_account_ix = Instruction {
+        program_id: &SYSTEM_PROGRAM_ID,
+        accounts: &[
+            AccountMeta { pubkey: payer_info.key(), is_signer: true, is_writable: true },
+            AccountMeta { pubkey: escrow_info.key(), is_signer: true, is_writable: true },
         ],
+        data: &create_account_data,
+    };
+    
+    invoke_signed(
+        &create_account_ix,
+        &[payer_info, escrow_info],
         &[seeds],
     )?;
 
@@ -146,15 +191,15 @@ fn process_create_dst_escrow(
     escrow.deployed_at = clock.unix_timestamp as u64;
     escrow.bump = bump;
 
-    pinocchio::log::info!("Escrow created at {}", escrow_info.key);
+    msg!("Escrow created");
 
     Ok(())
 }
 
 /// Helper function to get next account
-fn next_account_info<'a, 'b: 'a>(
-    iter: &mut std::slice::Iter<'a, AccountInfo<'b>>,
-) -> Result<&'a AccountInfo<'b>, ProgramError> {
+fn next_account_info<'a>(
+    iter: &mut core::slice::Iter<'a, AccountInfo>,
+) -> Result<&'a AccountInfo, ProgramError> {
     iter.next().ok_or(ProgramError::NotEnoughAccountKeys)
 }
 
@@ -205,7 +250,7 @@ fn process_withdraw(
         &escrow.hash_secret,
         program_id,
     );
-    if escrow_info.key != &expected_pda {
+    if escrow_info.key() != &expected_pda {
         return Err(EscrowError::InvalidPDA.into());
     }
 
@@ -220,7 +265,7 @@ fn process_withdraw(
     }
 
     // Get current time
-    let clock = Clock::from_account_info(clock_info)?;
+    let clock = Clock::get()?;
     let current_time = clock.unix_timestamp as u64;
 
     // Check timelocks
@@ -258,9 +303,9 @@ fn process_withdraw(
     // Transfer tokens from escrow to destination
     let transfer_ix = spl_token::instruction::transfer(
         &spl_token::id(),
-        escrow_token_info.key,
-        destination_token_info.key,
-        escrow_info.key,
+        &to_solana_pubkey(escrow_token_info.key()),
+        &to_solana_pubkey(destination_token_info.key()),
+        &to_solana_pubkey(escrow_info.key()),
         &[],
         escrow.amount,
     )?;
@@ -274,20 +319,20 @@ fn process_withdraw(
         &[escrow.bump],
     ];
 
-    invoke_signed(
+    invoke_spl_token_signed(
         &transfer_ix,
         &[
-            escrow_token_info.clone(),
-            destination_token_info.clone(),
-            escrow_info.clone(),
-            token_program_info.clone(),
+            escrow_token_info,
+            destination_token_info,
+            escrow_info,
+            token_program_info,
         ],
-        &[seeds],
+        seeds,
     )?;
 
     // Transfer safety deposit to caller (last to prevent re-entrancy)
-    **escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
-    **caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
+    *escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
+    *caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
 
     // Close PDA if single-fill or last Merkle leaf
     let should_close = escrow.merkle_root == [0u8; 32] || escrow.filled_index >= (1u32 << 32); // Max 2^32 leaves
@@ -295,11 +340,11 @@ fn process_withdraw(
     if should_close {
         // Transfer remaining lamports to caller and zero the account
         let remaining_lamports = escrow_info.lamports();
-        **escrow_info.try_borrow_mut_lamports()? = 0;
-        **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
+        *escrow_info.try_borrow_mut_lamports()? = 0;
+        *caller_info.try_borrow_mut_lamports()? += remaining_lamports;
     }
 
-    pinocchio::log::info!("Withdraw successful for escrow {}", escrow_info.key);
+    msg!("Withdraw successful");
 
     Ok(())
 }
@@ -386,12 +431,12 @@ fn process_cancel(program_id: &Pubkey, accounts: &[AccountInfo], is_public: bool
         &escrow.hash_secret,
         program_id,
     );
-    if escrow_info.key != &expected_pda {
+    if escrow_info.key() != &expected_pda {
         return Err(EscrowError::InvalidPDA.into());
     }
 
     // Get current time
-    let clock = Clock::from_account_info(clock_info)?;
+    let clock = Clock::get()?;
     let current_time = clock.unix_timestamp as u64;
 
     // Check timelocks
@@ -419,9 +464,9 @@ fn process_cancel(program_id: &Pubkey, accounts: &[AccountInfo], is_public: bool
     // Transfer tokens back to resolver
     let transfer_ix = spl_token::instruction::transfer(
         &spl_token::id(),
-        escrow_token_info.key,
-        resolver_token_info.key,
-        escrow_info.key,
+        &to_solana_pubkey(escrow_token_info.key()),
+        &to_solana_pubkey(resolver_token_info.key()),
+        &to_solana_pubkey(escrow_info.key()),
         &[],
         escrow.amount,
     )?;
@@ -435,27 +480,27 @@ fn process_cancel(program_id: &Pubkey, accounts: &[AccountInfo], is_public: bool
         &[escrow.bump],
     ];
 
-    invoke_signed(
+    invoke_spl_token_signed(
         &transfer_ix,
         &[
-            escrow_token_info.clone(),
-            resolver_token_info.clone(),
-            escrow_info.clone(),
-            token_program_info.clone(),
+            escrow_token_info,
+            resolver_token_info,
+            escrow_info,
+            token_program_info,
         ],
-        &[seeds],
+        seeds,
     )?;
 
     // Transfer safety deposit to caller as incentive (last to prevent re-entrancy)
-    **escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
-    **caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
+    *escrow_info.try_borrow_mut_lamports()? -= escrow.safety_deposit_lamports;
+    *caller_info.try_borrow_mut_lamports()? += escrow.safety_deposit_lamports;
 
     // Close PDA - transfer remaining lamports to caller
     let remaining_lamports = escrow_info.lamports();
-    **escrow_info.try_borrow_mut_lamports()? = 0;
-    **caller_info.try_borrow_mut_lamports()? += remaining_lamports;
+    *escrow_info.try_borrow_mut_lamports()? = 0;
+    *caller_info.try_borrow_mut_lamports()? += remaining_lamports;
 
-    pinocchio::log::info!("Cancel successful for escrow {}", escrow_info.key);
+    msg!("Cancel successful");
 
     Ok(())
 }
@@ -475,7 +520,7 @@ fn process_public_withdraw(
 
     // Load escrow to check public withdraw timelock
     let escrow = Escrow::from_account_info(escrow_info)?;
-    let clock = Clock::from_account_info(clock_info)?;
+    let clock = Clock::get()?;
     let current_time = clock.unix_timestamp as u64;
 
     // Ensure we're in public withdraw phase
@@ -520,12 +565,12 @@ fn process_rescue_funds(program_id: &Pubkey, accounts: &[AccountInfo]) -> Progra
         &escrow.hash_secret,
         program_id,
     );
-    if escrow_info.key != &expected_pda {
+    if escrow_info.key() != &expected_pda {
         return Err(EscrowError::InvalidPDA.into());
     }
 
     // Get current time
-    let clock = Clock::from_account_info(clock_info)?;
+    let clock = Clock::get()?;
     let current_time = clock.unix_timestamp as u64;
 
     // Check rescue timelock
@@ -542,9 +587,9 @@ fn process_rescue_funds(program_id: &Pubkey, accounts: &[AccountInfo]) -> Progra
 
         let transfer_ix = spl_token::instruction::transfer(
             &spl_token::id(),
-            escrow_token_info.key,
-            resolver_token_info.key,
-            escrow_info.key,
+            &to_solana_pubkey(escrow_token_info.key()),
+            &to_solana_pubkey(resolver_token_info.key()),
+            &to_solana_pubkey(escrow_info.key()),
             &[],
             escrow.amount,
         )?;
@@ -558,24 +603,24 @@ fn process_rescue_funds(program_id: &Pubkey, accounts: &[AccountInfo]) -> Progra
             &[escrow.bump],
         ];
 
-        invoke_signed(
+        invoke_spl_token_signed(
             &transfer_ix,
             &[
-                escrow_token_info.clone(),
-                resolver_token_info.clone(),
-                escrow_info.clone(),
-                token_program_info.clone(),
+                escrow_token_info,
+                resolver_token_info,
+                escrow_info,
+                token_program_info,
             ],
-            &[seeds],
+            seeds,
         )?;
     }
 
     // Transfer all remaining lamports to resolver and close PDA
     let remaining_lamports = escrow_info.lamports();
-    **escrow_info.try_borrow_mut_lamports()? = 0;
-    **resolver_info.try_borrow_mut_lamports()? += remaining_lamports;
+    *escrow_info.try_borrow_mut_lamports()? = 0;
+    *resolver_info.try_borrow_mut_lamports()? += remaining_lamports;
 
-    pinocchio::log::info!("Rescue funds successful for escrow {}", escrow_info.key);
+    msg!("Rescue funds successful");
 
     Ok(())
 }
