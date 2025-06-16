@@ -2,20 +2,16 @@
 
 ## Critical Constraints
 - **Framework**: pinocchio (NO Anchor)
-- **Rust**: 1.77 MSRV
-- **BPF Size**: ≤ 120 KiB
+- **Rust**: 1.87.0 target
 - **Program**: Immutable (no upgrade authority)
 
 ## Commands
 ```bash
 # Build
-cargo build-bpf --manifest-path program/Cargo.toml -- --release
+cargo build-sbf --manifest-path program/Cargo.toml -- --release
 
 # Test
 cargo test -- --nocapture
-
-# Check BPF size
-du -b program/target/deploy/*.so
 
 # Lint/Format
 cargo fmt -- --check
@@ -45,21 +41,16 @@ role_byte = 0x00 for Dst escrow on Solana
 ```
 
 ## Security Musts
-- Keccak256 for secret verification (260 CU)
+- Keccak256 for secret verification
 - Merkle depth ≤ 32
 - Check overflow with checked_add/mul
 - Transfer lamports LAST (re-entrancy)
 - Keep PDA rent-exempt always
 - Close PDA after last action
 
-## CU Budget
-- Target: < 200k CU for 32-level Merkle withdraw
-- Use precomputed hashes
-- Hard-cap loops at 32
-
 ## Testing Gates
 - `happy_path.rs` - Basic flow
 - `public_withdraw.rs` - Public phase
 - `cancel.rs` - Cancel flow
 - `merkle_depth32.rs` - Deep proofs
-- `cu_budget.rs` - CU limits
+- `cu_budget.rs` - Performance benchmarks

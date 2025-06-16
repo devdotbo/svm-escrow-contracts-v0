@@ -23,10 +23,10 @@ pub fn create_token_mint() -> (Pubkey, Account) {
 pub fn create_token_account(mint: &Pubkey, owner: &Pubkey, amount: u64) -> (Pubkey, Account) {
     let account_pubkey = Pubkey::new_unique();
     let mut data = vec![0; 165]; // SPL Token Account size
-    
+
     // Mock token account data (simplified)
     // In real tests, use spl_token::state::Account
-    
+
     let account = Account {
         lamports: 2_039_280, // Rent-exempt amount
         data,
@@ -38,14 +38,16 @@ pub fn create_token_account(mint: &Pubkey, owner: &Pubkey, amount: u64) -> (Pubk
 }
 
 /// Pack escrow instruction for testing
-pub fn pack_escrow_instruction(instruction: &svm_escrow::instruction::EscrowInstruction) -> Vec<u8> {
-    use svm_escrow::instruction::{EscrowInstruction, EscrowInit};
+pub fn pack_escrow_instruction(
+    instruction: &svm_escrow::instruction::EscrowInstruction,
+) -> Vec<u8> {
     use std::mem;
-    
+    use svm_escrow::instruction::{EscrowInit, EscrowInstruction};
+
     match instruction {
         EscrowInstruction::CreateDstEscrow(init) => {
             let mut data = vec![0u8]; // Discriminator
-            // Pack the struct directly as bytes (matching on-chain expectation)
+                                      // Pack the struct directly as bytes (matching on-chain expectation)
             let init_bytes = unsafe {
                 std::slice::from_raw_parts(
                     init as *const EscrowInit as *const u8,
@@ -63,7 +65,11 @@ pub fn pack_escrow_instruction(instruction: &svm_escrow::instruction::EscrowInst
             }
             data
         }
-        EscrowInstruction::WithdrawTo { secret, target, proof } => {
+        EscrowInstruction::WithdrawTo {
+            secret,
+            target,
+            proof,
+        } => {
             let mut data = vec![2u8]; // Discriminator
             data.extend_from_slice(secret);
             data.extend_from_slice(target.as_ref());

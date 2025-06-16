@@ -1,8 +1,4 @@
-use pinocchio::{
-    account_info::AccountInfo,
-    pubkey::Pubkey,
-    ProgramResult,
-};
+use pinocchio::{account_info::AccountInfo, pubkey::Pubkey, ProgramResult};
 
 /// Zero-copy account structure for the Escrow PDA
 /// Must match the exact field order and types from the specification
@@ -35,13 +31,13 @@ pub struct Escrow {
 
 impl Escrow {
     pub const LEN: usize = 32 + 32 + 32 + 32 + 8 + 8 + 32 + 4 + (8 * 7) + 8 + 1;
-    
+
     /// PDA seed prefix
     pub const SEED_PREFIX: &'static [u8] = b"escrow";
-    
+
     /// Role byte for Solana destination escrows
     pub const ROLE_BYTE_DST: u8 = 0x00;
-    
+
     /// Timelock indices matching TimelocksLib.Stage on EVM
     pub const TL_SRC_EXCLUSIVE_WITHDRAW: usize = 0;
     pub const TL_SRC_PUBLIC_WITHDRAW: usize = 1;
@@ -50,7 +46,7 @@ impl Escrow {
     pub const TL_DST_EXCLUSIVE_CANCEL: usize = 4;
     pub const TL_DST_PUBLIC_CANCEL: usize = 5;
     pub const TL_RESCUE: usize = 6;
-    
+
     /// Derives the PDA address for an escrow
     pub fn derive_pda(
         maker: &Pubkey,
@@ -69,30 +65,26 @@ impl Escrow {
             program_id,
         )
     }
-    
+
     /// Deserialize from account data
     pub fn from_account_info(account: &AccountInfo) -> Result<&Self, ProgramError> {
         if account.data_len() < Self::LEN {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        
-        let escrow = unsafe {
-            &*(account.data.borrow().as_ptr() as *const Self)
-        };
-        
+
+        let escrow = unsafe { &*(account.data.borrow().as_ptr() as *const Self) };
+
         Ok(escrow)
     }
-    
+
     /// Deserialize mutably from account data
     pub fn from_account_info_mut(account: &AccountInfo) -> Result<&mut Self, ProgramError> {
         if account.data_len() < Self::LEN {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        
-        let escrow = unsafe {
-            &mut *(account.data.borrow_mut().as_mut_ptr() as *mut Self)
-        };
-        
+
+        let escrow = unsafe { &mut *(account.data.borrow_mut().as_mut_ptr() as *mut Self) };
+
         Ok(escrow)
     }
 }

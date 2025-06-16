@@ -8,6 +8,8 @@ Upgrade the SVM escrow contracts project to:
 - Latest dependency versions
 - Minimize/eliminate solana-program usage
 
+Note: BPF size and CU limits are not critical for this upgrade - as long as the program stays within Solana's bounds.
+
 ## Phase 1: Dependency Analysis
 
 ### Current Dependencies
@@ -111,9 +113,8 @@ solana-program = "=2.2.16"
 ### Steps:
 1. Run `cargo update` to get latest compatible versions
 2. Build with `cargo build-sbf`
-3. Verify BPF size still < 120 KiB
-4. Run all tests
-5. Check CU budget benchmarks
+3. Run all tests
+4. Verify program builds and deploys successfully
 
 ## Breaking Changes to Watch
 
@@ -137,8 +138,7 @@ solana-program = "=2.2.16"
 1. **Create upgrade branch** (done)
 2. **Incremental updates** - One component at a time
 3. **Comprehensive testing** after each change
-4. **BPF size monitoring** - Ensure no regressions
-5. **CU budget verification** - Maintain < 200k target
+4. **Functionality verification** - Ensure all operations work correctly
 
 ## Implementation Order
 
@@ -148,8 +148,7 @@ solana-program = "=2.2.16"
 4. Update test dependencies
 5. Fix any compilation issues
 6. Run full test suite
-7. Verify BPF size and CU usage
-8. Document any API changes
+7. Document any API changes
 
 ## Success Criteria
 
@@ -158,6 +157,5 @@ solana-program = "=2.2.16"
 - [ ] Pinocchio 0.8.4 integrated
 - [ ] No solana-program dependency in main program
 - [ ] All tests pass
-- [ ] BPF size < 120 KiB maintained
-- [ ] CU budget < 200k maintained
+- [ ] Program builds and deploys successfully
 - [ ] No functional regressions

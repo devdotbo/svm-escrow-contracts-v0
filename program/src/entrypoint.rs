@@ -1,11 +1,6 @@
 #![cfg(not(feature = "no-entrypoint"))]
 
-use pinocchio::{
-    account_info::AccountInfo,
-    entrypoint,
-    entrypoint::ProgramResult,
-    pubkey::Pubkey,
-};
+use pinocchio::{account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey};
 
 use crate::processor::process_instruction;
 
